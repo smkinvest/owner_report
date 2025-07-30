@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Таск-менеджер</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Плавный переход для скрытия/показа экранов */
+        .page {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            width: 100%;
+        }
+        .page.hidden {
+            opacity: 0;
+            transform: translateX(20px);
+            pointer-events: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .page.visible {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: auto;
+            position: relative;
+        }
+        .app-body {
+            position: relative;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900">
+
+    <div id="app-container" class="max-w-md mx-auto bg-white dark:bg-black min-h-screen shadow-lg">
+        <div class="app-body">
+            <!-- Page: Task List -->
+            <div id="list-page" class="page visible">
+                <header class="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-sm z-10">
+                    <button class="text-gray-600 dark:text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                    </button>
+                    <div class="flex items-center gap-4">
+                        <button class="text-gray-600 dark:text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </button>
+                    </div>
+                </header>
+                <main id="task-list-container" class="p-4 space-y-4">
+                    <!-- Task cards will be injected here -->
+                </main>
+            </div>
+
+            <!-- Page: Task History -->
+            <div id="history-page" class="page hidden">
+                <header class="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-sm z-10">
+                    <button class="back-button text-gray-600 dark:text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    <h2 id="history-title" class="font-semibold text-lg text-gray-800 dark:text-gray-200">История</h2>
+                    <div class="w-6"></div>
+                </header>
+                <main id="task-history-container" class="p-6 space-y-5">
+                    <!-- History will be injected here -->
+                </main>
+            </div>
+
+            <!-- Page: Add Comment -->
+            <div id="comment-page" class="page hidden">
+                 <header class="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-sm z-10">
+                    <button class="back-button text-gray-600 dark:text-gray-400">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    <h2 class="font-semibold text-lg text-gray-800 dark:text-gray-200">Новый комментарий</h2>
+                    <button id="save-comment-button" class="text-blue-500 font-semibold">Сохранить</button>
+                </header>
+                <main id="task-comment-container" class="p-6 space-y-6">
+                     <!-- Comment form will be injected here -->
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- ДАННЫЕ (из вашей Google-таблицы с добавлением истории) ---
+        const tasks = [
+            { id: 1, project: "Операционные Задачи", responsible: "Даникс", stage: "В Работе", title: "Даникс", 
+              history: [
+                { date: "2024-05-10", message: "выясняем вопрос отчета по Контролируемым Иностранным Компаний (КИК) для Парамонова в Украине." },
+                { date: "2024-05-09", message: "вопрос о ожидании решения по совместной работе с новой компанией Оксаны Яремы" }
+              ] 
+            },
+            { id: 2, project: "Операционные Задачи", responsible: "SMK Invest", stage: "В Ожидании", title: "СМК Инвест вебсайт",
+              history: [
+                { date: "2024-05-10", message: "Ты просил напомнить в Марте или мы уже можем запустить сайт СМК Инвест. Уже май." }
+              ]
+            },
+            { id: 3, project: "Задачи собственника", responsible: "SMK Invest", stage: "В Работе", title: "НБУ/Кабмин",
+              history: [
+                { date: "2024-05-10", message: "Кубив согласен встретится, возможно во Львове." }
+              ]
+            },
+            { id: 4, project: "Задачи собственника", responsible: "SMK Invest", stage: "В Работе", title: "Частное финансирование",
+              history: [
+                { date: "2024-05-10", message: "Апр 26 послал запрос" }
+              ]
+            },
+            { id: 5, project: "Операционные Задачи", responsible: "SMK Invest", stage: "В Ожидании", title: "Торговая марка",
+              history: [
+                { date: "2024-05-13", message: "Лого в процессе" }
+              ]
+            },
+            { id: 6, project: "Задачи собственника", responsible: "SMK Invest", stage: "В Ожидании", title: "Покупка нового бизнеса",
+              history: [
+                { date: "2024-05-13", message: "ищем варианты" }
+              ]
+            }
+        ];
+
+        // --- DOM Элементы ---
+        const listPage = document.getElementById('list-page');
+        const historyPage = document.getElementById('history-page');
+        const commentPage = document.getElementById('comment-page');
+        
+        const taskListContainer = document.getElementById('task-list-container');
+        const taskHistoryContainer = document.getElementById('task-history-container');
+        const taskCommentContainer = document.getElementById('task-comment-container');
+        const historyTitle = document.getElementById('history-title');
+
+        let currentTaskId = null; // Для хранения ID текущей задачи
+
+        // --- Функции навигации ---
+        function navigateTo(pageId) {
+            [listPage, historyPage, commentPage].forEach(page => {
+                if (page.id === pageId) {
+                    page.classList.remove('hidden');
+                    page.classList.add('visible');
+                } else {
+                    page.classList.remove('visible');
+                    page.classList.add('hidden');
+                }
+            });
+            window.scrollTo(0, 0);
+        }
+
+        // --- Функции рендеринга ---
+        
+        function renderTaskList() {
+            taskListContainer.innerHTML = '';
+            tasks.forEach(task => {
+                const latestStatus = task.history[0]?.message || 'Нет статуса';
+                const card = document.createElement('div');
+                card.className = "bg-white dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700/50 p-4 shadow-sm";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-sm font-medium text-gray-500 dark:text-gray-400">${task.project}</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full ${task.stage === 'В Работе' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300'}">${task.stage}</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">${task.title}</h3>
+                    <p class="text-gray-600 dark:text-gray-300 mt-2 mb-4 text-sm truncate">${latestStatus}</p>
+                    <div class="flex justify-between items-center border-t border-gray-200 dark:border-gray-700/50 pt-3 mt-3">
+                        <div class="flex items-center gap-4">
+                            <button data-action="history" data-id="${task.id}" class="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">История</button>
+                            <button data-action="comment" data-id="${task.id}" class="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">Вопрос/Комментарий</button>
+                        </div>
+                    </div>
+                `;
+                taskListContainer.appendChild(card);
+            });
+        }
+
+        function renderHistory(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            historyTitle.textContent = `История: ${task.title}`;
+            taskHistoryContainer.innerHTML = '';
+            
+            if (task.history.length === 0) {
+                taskHistoryContainer.innerHTML = `<p class="text-gray-500">История пуста.</p>`;
+            } else {
+                task.history.forEach(item => {
+                    const historyItem = document.createElement('div');
+                    historyItem.className = 'border-l-4 border-blue-500 pl-4 py-2';
+                    historyItem.innerHTML = `
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">${new Date(item.date).toLocaleDateString('ru-RU')}</p>
+                        <p class="text-lg text-gray-800 dark:text-gray-200">${item.message}</p>
+                    `;
+                    taskHistoryContainer.appendChild(historyItem);
+                });
+            }
+            navigateTo('history-page');
+        }
+        
+        function renderCommentForm(taskId) {
+            currentTaskId = taskId; // Сохраняем ID задачи для сохранения
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            taskCommentContainer.innerHTML = `
+                <div class="space-y-2">
+                    <label for="comment-textarea" class="text-sm font-medium text-gray-500 dark:text-gray-400">Ваш вопрос или комментарий для задачи "${task.title}":</label>
+                    <textarea id="comment-textarea" class="w-full p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-900 dark:text-gray-100" rows="6" placeholder="Введите текст..."></textarea>
+                </div>
+            `;
+            navigateTo('comment-page');
+        }
+
+        function saveComment() {
+            if (currentTaskId === null) return;
+
+            const task = tasks.find(t => t.id === currentTaskId);
+            const textarea = document.getElementById('comment-textarea');
+            const message = textarea.value.trim();
+
+            if (!task || !message) {
+                alert('Комментарий не может быть пустым.');
+                return;
+            }
+
+            // 1. Обновляем локальные данные
+            const today = new Date().toISOString().split('T')[0];
+            task.history.unshift({ date: today, message: message });
+
+            // 2. Симуляция обновления Google Sheets
+            console.log("--- СИМУЛЯЦИЯ ОБНОВЛЕНИЯ GOOGLE SHEETS ---");
+            console.log(`Задача ID: ${task.id}`);
+            console.log(`Новый комментарий: ${message}`);
+            console.log("Этот комментарий должен быть добавлен в колонку 'Вопрос/Задание'.");
+            console.log("-----------------------------------------");
+
+            // 3. Симуляция отправки email через mailto:
+            const email = 'oleksii.m@smkinvest.pl';
+            const subject = `Новый комментарий по задаче: ${task.title}`;
+            const body = `Пользователь оставил новый комментарий к задаче "${task.title}":\n\n"${message}"`;
+            const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            
+            // Создаем невидимую ссылку и кликаем по ней, чтобы открыть почтовый клиент
+            const a = document.createElement('a');
+            a.href = mailtoLink;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // 4. Возвращаемся к списку и обновляем его
+            renderTaskList();
+            navigateTo('list-page');
+            currentTaskId = null;
+        }
+
+        // --- Обработчики событий ---
+        
+        taskListContainer.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (!button) return;
+            
+            const action = button.dataset.action;
+            const id = parseInt(button.dataset.id);
+
+            if (action === 'history') {
+                renderHistory(id);
+            } else if (action === 'comment') {
+                renderCommentForm(id);
+            }
+        });
+
+        document.querySelectorAll('.back-button').forEach(button => {
+            button.addEventListener('click', () => navigateTo('list-page'));
+        });
+
+        document.getElementById('save-comment-button').addEventListener('click', saveComment);
+
+        // --- Инициализация ---
+        document.addEventListener('DOMContentLoaded', () => {
+            renderTaskList();
+            navigateTo('list-page');
+        });
+    </script>
+</body>
+</html>
