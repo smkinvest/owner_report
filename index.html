@@ -87,7 +87,7 @@
             <!-- Сообщение об ошибке -->
             <div id="error-message" class="hidden text-center py-10 px-4">
                 <p class="text-red-500 font-semibold">Не удалось загрузить данные</p>
-                <p class="text-gray-500 mt-2">Пожалуйста, проверьте ваше интернет-соединение и убедитесь, что ссылка на Google Sheet верна и опубликована в веб.</p>
+                <p class="text-gray-500 mt-2">Пожалуйста, проверьте ваше интернет-соединение и убедитесь, что ссылки на Google Sheets верны и опубликованы в веб.</p>
                 <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">Попробовать снова</button>
             </div>
         </main>
@@ -139,10 +139,11 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // URL Google Sheet CSV
-            const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQks6Gol4ai_0LPMjvrZ8SP_3UxxRAOwpFCtslDM-f1C942pbD3x2VNyBiHXTk8JXQ7UMofdeo_lwHe/pub?gid=0&single=true&output=csv';
-            // Прокси для обхода CORS
-            const PROXY_URL = `https://corsproxy.io/?${encodeURIComponent(CSV_URL)}`;
+            // URLs Google Sheets CSV
+            const CSV_URLS = [
+                'https://docs.google.com/spreadsheets/d/e/2PACX-1vQks6Gol4ai_0LPMjvrZ8SP_3UxxRAOwpFCtslDM-f1C942pbD3x2VNyBiHXTk8JXQ7UMofdeo_lwHe/pub?gid=0&single=true&output=csv',
+                'https://docs.google.com/spreadsheets/d/e/2PACX-1vSHLKUQ8z3S6sHg5eiFHCqjwHa2k24wHeVpO00HrOCUOff9US1_MVFJoOk1Vt8tQsq7o-ILUs5AxF9c/pub?gid=0&single=true&output=csv'
+            ];
 
             const taskList = document.getElementById('task-list');
             const loader = document.getElementById('loader');
@@ -153,6 +154,77 @@
             
             let tasksData = {};
             let currentTaskTitle = '';
+            let cardObserver;
+
+            // --- Функции для работы с localStorage (статус прочтения) ---
+            function getReadStatus() {
+                try {
+                    const status = localStorage.getItem('taskReadStatus');
+                    return status ? JSON.parse(status) : {};
+                } catch (e) {
+                    console.error("Failed to parse read status from localStorage", e);
+                    return {};
+                }
+            }
+
+            function saveReadStatus(statuses) {
+                try {
+                    localStorage.setItem('taskReadStatus', JSON.stringify(statuses));
+                } catch (e) {
+                    console.error("Failed to save read status to localStorage", e);
+                }
+            }
+
+            // --- Функция для отметки задачи как прочитанной ---
+            function markTaskAsRead(title) {
+                const task = tasksData[title];
+                if (!task || task.history.length === 0) return;
+
+                // Создаем уникальный идентификатор для последнего обновления
+                const latestUpdateIdentifier = task.history[0].date + '||' + task.history[0].status;
+                const readStatuses = getReadStatus();
+
+                if (readStatuses[title] !== latestUpdateIdentifier) {
+                    readStatuses[title] = latestUpdateIdentifier;
+                    saveReadStatus(readStatuses);
+
+                    const cardToUpdate = taskList.querySelector(`.is-unread[data-title="${title}"]`);
+                    if (cardToUpdate) {
+                        const dot = cardToUpdate.querySelector('.mark-as-read-dot');
+                        if (dot) dot.remove();
+                        cardToUpdate.classList.remove('is-unread');
+                    }
+                }
+            }
+
+            // --- Настройка Intersection Observer ---
+            function observeUnreadCards() {
+                if (cardObserver) cardObserver.disconnect();
+
+                cardObserver = new IntersectionObserver((entries, observer) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const card = entry.target;
+                            const title = card.dataset.title;
+                            
+                            // Ждем 5 секунд перед тем, как пометить прочитанным
+                            setTimeout(() => {
+                                // Проверяем, существует ли еще карточка в DOM, прежде чем менять статус
+                                if (document.body.contains(card)) {
+                                    markTaskAsRead(title);
+                                }
+                            }, 5000);
+
+                            // Сразу прекращаем наблюдение, чтобы таймер не сработал несколько раз для одной карточки
+                            observer.unobserve(card);
+                        }
+                    });
+                }, { threshold: 0.75 }); // Срабатывает, когда 75% карточки видно
+
+                const unreadCards = document.querySelectorAll('.is-unread');
+                unreadCards.forEach(card => cardObserver.observe(card));
+            }
+
 
             // Функция для парсинга CSV
             function parseCSV(text) {
@@ -190,16 +262,13 @@
                 let currentStage = '';
 
                 data.forEach(row => {
-                    // Если в строке есть новый заголовок, запоминаем его и данные задачи
                     if (row['Заголовок'] && row['Заголовок'].trim() !== '') {
                         currentTitle = row['Заголовок'];
                         currentProject = row['Проект'];
                         currentStage = row['Этап'];
                     }
 
-                    // Если мы отслеживаем задачу (у нас есть currentTitle)
                     if (currentTitle) {
-                        // Инициализируем задачу в сгруппированном объекте, если видим ее впервые
                         if (!grouped[currentTitle]) {
                             grouped[currentTitle] = {
                                 project: currentProject,
@@ -208,7 +277,6 @@
                             };
                         }
                         
-                        // Добавляем запись в историю, если в строке есть дата и статус
                         if (row['Обновлено'] && row['Обновлено'].trim() !== '' && row['Текущий статус'] && row['Текущий статус'].trim() !== '') {
                             grouped[currentTitle].history.push({
                                 date: row['Обновлено'],
@@ -218,20 +286,17 @@
                     }
                 });
 
-                // Сортируем историю для каждой задачи
                 for (const title in grouped) {
                     grouped[title].history.sort((a, b) => {
-                        // Добавляем текущий год для корректного сравнения дат, т.к. в CSV его нет
                         const year = new Date().getFullYear();
                         const dateA = new Date(`${a.date.split(',')[1]} ${year}`);
                         const dateB = new Date(`${b.date.split(',')[1]} ${year}`);
-                        return dateB - dateA; // Сортировка от новой к старой
+                        return dateB - dateA;
                     });
                 }
                 return grouped;
             }
             
-            // Функция для определения цвета бейджа
             function getStageBadge(stage) {
                 switch (stage) {
                     case 'В Работе':
@@ -247,20 +312,29 @@
 
             // Функция для рендеринга карточек
             function renderTasks() {
-                taskList.innerHTML = ''; // Очищаем список перед рендерингом
+                taskList.innerHTML = ''; 
+                const readStatuses = getReadStatus();
+
                 Object.entries(tasksData).forEach(([title, task], index) => {
                     if (!task.history || task.history.length === 0) return;
 
                     const latestStatus = task.history[0];
+                    // Сравниваем по уникальному идентификатору "дата+статус"
+                    const latestUpdateIdentifier = latestStatus.date + '||' + latestStatus.status;
+                    const isRead = readStatuses[title] === latestUpdateIdentifier;
+
                     const card = document.createElement('div');
-                    card.className = 'bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer fade-in';
+                    card.className = `bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer fade-in ${!isRead ? 'is-unread' : ''}`;
                     card.style.animationDelay = `${index * 50}ms`;
                     card.dataset.title = title;
 
                     card.innerHTML = `
-                        <div class="flex justify-between items-start">
+                        <div class="flex justify-between items-center">
                             <p class="text-sm text-gray-500">${task.project}</p>
-                            <span class="text-xs font-medium px-2.5 py-0.5 rounded-full ${getStageBadge(task.stage)}">${task.stage}</span>
+                            <div class="flex items-center space-x-2">
+                                ${!isRead ? '<div class="mark-as-read-dot w-3 h-3 bg-red-500 rounded-full" title="Пометить как прочитанное"></div>' : ''}
+                                <span class="text-xs font-medium px-2.5 py-0.5 rounded-full ${getStageBadge(task.stage)}">${task.stage}</span>
+                            </div>
                         </div>
                         <h3 class="font-bold text-lg text-gray-800 mt-1">${title}</h3>
                         <p class="text-gray-600 mt-1 whitespace-normal">${latestStatus.status}</p>
@@ -271,13 +345,17 @@
                     `;
                     taskList.appendChild(card);
                 });
+                
+                // Запускаем наблюдение за непрочитанными карточками
+                setTimeout(observeUnreadCards, 0);
             }
             
             // Открытие модального окна
             function openModal(title, initialTab = 'history') {
-                currentTaskTitle = title;
                 const task = tasksData[title];
-                
+                if (!task) return;
+
+                currentTaskTitle = title;
                 document.getElementById('modal-title').textContent = title;
                 
                 const historyContainer = document.getElementById('history-content');
@@ -289,7 +367,6 @@
                 `).join('');
 
                 document.getElementById('comment-textarea').value = '';
-
                 switchTab(initialTab);
                 
                 modal.classList.remove('hidden');
@@ -301,7 +378,6 @@
                 }, 300);
             }
 
-            // Закрытие модального окна
             function closeModal() {
                 modal.classList.add('modal-bg-leave-active');
                 modalContent.classList.add('modal-content-leave-active');
@@ -313,7 +389,6 @@
                 }, 300);
             }
 
-            // Переключение вкладок
             function switchTab(tabName) {
                 document.querySelectorAll('.tab-link').forEach(link => {
                     if (link.dataset.tab === tabName) {
@@ -329,16 +404,26 @@
                 document.getElementById('comment-content').classList.toggle('hidden', tabName !== 'comment');
             }
 
-            // Загрузка данных
+            // Загрузка данных из нескольких источников
             async function fetchData() {
                 try {
-                    const response = await fetch(PROXY_URL);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                    const responses = await Promise.all(
+                        CSV_URLS.map(url => fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`))
+                    );
+
+                    for (const response of responses) {
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     }
-                    const csvText = await response.text();
-                    const parsedData = parseCSV(csvText);
-                    tasksData = groupTasks(parsedData);
+
+                    const csvTexts = await Promise.all(responses.map(res => res.text()));
+                    
+                    let allData = [];
+                    csvTexts.forEach(text => {
+                        const parsedData = parseCSV(text);
+                        allData = allData.concat(parsedData);
+                    });
+
+                    tasksData = groupTasks(allData);
                     loader.classList.add('hidden');
                     renderTasks();
                 } catch (error) {
@@ -350,10 +435,20 @@
 
             // Обработчики событий
             taskList.addEventListener('click', (e) => {
-                const card = e.target.closest('.cursor-pointer');
+                const card = e.target.closest('[data-title]');
                 if (!card) return;
-
                 const title = card.dataset.title;
+
+                // Нажатие на красную точку
+                if (e.target.classList.contains('mark-as-read-dot')) {
+                    e.stopPropagation(); // Останавливаем всплытие, чтобы не открылось модальное окно
+                    markTaskAsRead(title);
+                    return;
+                }
+
+                // Нажатие на карточку для открытия
+                markTaskAsRead(title); // Сначала помечаем как прочитанное
+
                 if (e.target.classList.contains('history-link')) {
                     e.preventDefault();
                     openModal(title, 'history');
@@ -367,17 +462,13 @@
 
             closeModalBtn.addEventListener('click', closeModal);
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    closeModal();
-                }
+                if (e.target === modal) closeModal();
             });
 
             document.getElementById('tabs').addEventListener('click', (e) => {
                 e.preventDefault();
                 const link = e.target.closest('.tab-link');
-                if (link && link.dataset.tab) {
-                    switchTab(link.dataset.tab);
-                }
+                if (link && link.dataset.tab) switchTab(link.dataset.tab);
             });
 
             document.getElementById('save-comment').addEventListener('click', () => {
@@ -385,23 +476,15 @@
                 const commentText = textarea.value.trim();
                 if (!commentText || !currentTaskTitle) return;
 
-                // Генерируем mailto ссылку
                 const recipient = 'oleksii.m@smkinvest.pl';
                 const subject = `Комментарий к задаче: ${currentTaskTitle}`;
                 const body = `Задача: ${currentTaskTitle}\n\nКомментарий:\n${commentText}`;
                 const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-                // Закрываем модальное окно
                 closeModal();
-
-                // Открываем почтовый клиент
-                // Небольшая задержка, чтобы анимация закрытия успела начаться
-                setTimeout(() => {
-                    window.location.href = mailtoLink;
-                }, 100);
+                setTimeout(() => { window.location.href = mailtoLink; }, 100);
             });
 
-            // Запускаем загрузку данных
             fetchData();
         });
     </script>
