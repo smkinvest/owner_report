@@ -128,9 +128,8 @@
                 <div id="comment-content" class="p-4 hidden">
                     <p class="text-sm text-gray-600 mb-2">Добавьте комментарий или вопрос. После сохранения будет сформировано письмо для отправки.</p>
                     <textarea id="comment-textarea" class="w-full h-32 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Введите ваш текст..."></textarea>
-                    <div id="comment-feedback" class="text-sm text-green-600 mt-2 hidden">Комментарий добавлен в локальную историю.</div>
                     <button id="save-comment" class="mt-3 w-full bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-600 transition disabled:bg-blue-300">
-                        Сохранить и отправить Email
+                        Отправить Email
                     </button>
                 </div>
             </div>
@@ -290,7 +289,6 @@
                 `).join('');
 
                 document.getElementById('comment-textarea').value = '';
-                document.getElementById('comment-feedback').classList.add('hidden');
 
                 switchTab(initialTab);
                 
@@ -387,34 +385,20 @@
                 const commentText = textarea.value.trim();
                 if (!commentText || !currentTaskTitle) return;
 
-                // 1. Визуально добавляем комментарий в историю
-                const historyContainer = document.getElementById('history-content');
-                const newHistoryItem = document.createElement('div');
-                newHistoryItem.className = 'pb-3 mb-3 border-b border-gray-200 last:border-b-0 bg-blue-50 p-2 rounded-lg';
-                const now = new Date();
-                const formattedDate = `${now.toDateString().slice(4, 10)}, ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-                
-                newHistoryItem.innerHTML = `
-                    <p class="text-xs text-blue-600 font-semibold">Только что (локально)</p>
-                    <p class="text-gray-700">${commentText}</p>
-                `;
-                historyContainer.prepend(newHistoryItem);
-
-                // Показываем фидбек и очищаем поле
-                document.getElementById('comment-feedback').classList.remove('hidden');
-                textarea.value = '';
-                setTimeout(() => {
-                    document.getElementById('comment-feedback').classList.add('hidden');
-                }, 3000);
-
-                // 2. Генерируем mailto ссылку
+                // Генерируем mailto ссылку
                 const recipient = 'oleksii.m@smkinvest.pl';
                 const subject = `Комментарий к задаче: ${currentTaskTitle}`;
                 const body = `Задача: ${currentTaskTitle}\n\nКомментарий:\n${commentText}`;
                 const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
+                // Закрываем модальное окно
+                closeModal();
+
                 // Открываем почтовый клиент
-                window.location.href = mailtoLink;
+                // Небольшая задержка, чтобы анимация закрытия успела начаться
+                setTimeout(() => {
+                    window.location.href = mailtoLink;
+                }, 100);
             });
 
             // Запускаем загрузку данных
